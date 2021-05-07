@@ -1,0 +1,14 @@
+
+Port Used On My MAC with the dongole plugged in
+/dev/cu.SLAB_USBtoUART
+
+
+On startup of working on the project or anytime using a new terminal run
+    "startupterm.zsh"
+    This runs the aliased command get_idf to allow idf.py to work in a new terminal
+
+For all information on creating this project use
+    https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#get-started-get-esp-idf
+
+To flash build and monitor (after running startupterm.zsh)
+    idf.py -p /dev/cu.SLAB_USBtoUART flash monitor
