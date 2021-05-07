@@ -1,3 +1,9 @@
+/*
+ *  Modified from the esp examples folder for connecting to wifi
+ *
+ *  Modified by: Hunter Waite
+ */
+
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
