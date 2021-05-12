@@ -9,4 +9,6 @@ void app_main(void)
 {
     // initializes wifi
     init_wifi();
+    init_request();
+    while(1){}
 }
