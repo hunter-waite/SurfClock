@@ -1,5 +1,6 @@
 /*
- *  Modified from the esp examples folder for connecting to wifi
+ *  Modified from the esp examples folder provided by EspressIf
+ *  for connecting to wifi
  *
  *  Modified by: Hunter Waite
  */

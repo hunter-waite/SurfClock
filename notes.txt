@@ -10,5 +10,9 @@ On startup of working on the project or anytime using a new terminal run
 For all information on creating this project use
     https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#get-started-get-esp-idf
 
-To flash build and monitor (after running startupterm.zsh)
+To flash build and monitor (after running get_idf)
     idf.py -p /dev/cu.SLAB_USBtoUART flash monitor
+
+get_idf
+    An alias put into my terminal's profile to allow me to run esp-idf
+    alias get_idf='. $HOME/esp/esp-idf/export.sh'

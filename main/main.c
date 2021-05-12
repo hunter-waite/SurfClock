@@ -7,8 +7,12 @@
 
 void app_main(void)
 {
-    // initializes wifi
+    /* initializes wifi and checks to make sure it stays connected to it */
     init_wifi();
+
+    /* constantly requests data from the surfline API */
     init_request();
-    while(1){}
+    while(1){
+        vTaskDelay(1);
+    }
 }
