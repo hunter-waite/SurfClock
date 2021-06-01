@@ -27,7 +27,6 @@
 #include "lwip/dns.h"
 
 #include "cJSON.h"
-#include "tag.h"
 
 /* Constants that aren't configurable in menuconfig */
 
@@ -40,16 +39,122 @@
 
 #define DELAY_TIME  10000   // 10 second delay time between each get request
 
-#define BUFFER_SIZE 2048    // 1000 byte character buffer
+#define BUFFER_SIZE 2048    // 2kB byte character buffer
+
+static const char *T = "JSON Parser";
 
 static const char *REQUEST = "GET " WEB_PATH " HTTP/1.0\r\n"
     "Host: "WEB_SERVER":"WEB_PORT"\r\n"
     "User-Agent: esp-idf/1.0 esp32\r\n"
     "\r\n";
 
-void parse_json(char *json, int json_len)
+/* takes in a string and uses CJSON to parse objects, for now prints to 
+    terminal */
+void parse_json(char *recv_buf, int recv_len)
 {
-    ESP_LOGI(TAG, "%s\n", json);
+    // initial json
+    const cJSON *data = NULL;
+
+    // conditions object
+    const cJSON *condition = NULL;
+    const cJSON *conditions = NULL;
+
+    // subsets of conditions
+    const cJSON *am = NULL;
+    const cJSON *rating = NULL;
+    const cJSON *maxHeight = NULL;
+    const cJSON *minHeight = NULL;
+    
+    const char *error_ptr = NULL;
+
+    /* get rid of the HTTP header */
+    char *content = strstr(recv_buf, "\r\n\r\n");
+
+    ESP_LOGI(T, "Parsing JSON\n");
+
+    if (content != NULL) {
+        content += 4; // Offset by 4 bytes to start of content
+    }
+    else {
+        ESP_LOGE(T, "End of Header Not Found\n");
+    }
+
+    /* parse the given json */
+    cJSON *json = cJSON_Parse(content);
+
+    /* check for invalid JSON response */
+    if (json == NULL)
+    {
+        ESP_LOGE(T, "\tError When First Parse\n");
+        error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL)
+        {
+            ESP_LOGE(T, "%s\n", error_ptr);
+        }
+        cJSON_Delete(json);
+        return;
+    }
+
+    data = cJSON_GetObjectItemCaseSensitive(json, "data");
+
+    conditions = cJSON_GetObjectItemCaseSensitive(data, "conditions");
+
+    cJSON_ArrayForEach(condition, conditions)
+    {
+        am = cJSON_GetObjectItemCaseSensitive(condition, "am");
+
+        rating = cJSON_GetObjectItemCaseSensitive(am, "rating");
+
+        if (!cJSON_IsString(rating))
+        {
+            ESP_LOGE(T, "\tWrong Rating\n");
+            error_ptr = cJSON_GetErrorPtr();
+            if (error_ptr != NULL)
+            {
+                ESP_LOGE(T, "%s\n", error_ptr);
+            }
+            cJSON_Delete(json);
+            return;
+        }
+
+        maxHeight = cJSON_GetObjectItemCaseSensitive(am, "maxHeight");
+
+        if (!cJSON_IsNumber(maxHeight))
+        {
+            ESP_LOGE(T, "\tWrong Max Height\n");
+            error_ptr = cJSON_GetErrorPtr();
+            if (error_ptr != NULL)
+            {
+                ESP_LOGE(T, "%s\n", error_ptr);
+            }
+            cJSON_Delete(json);
+            return;
+        }
+
+        minHeight = cJSON_GetObjectItemCaseSensitive(am, "minHeight");
+
+        if (!cJSON_IsNumber(minHeight))
+        {
+            ESP_LOGE(T, "\tWrong Min Height\n");
+            error_ptr = cJSON_GetErrorPtr();
+            if (error_ptr != NULL)
+            {
+                ESP_LOGE(T, "%s\n", error_ptr);
+            }
+            cJSON_Delete(json);
+            return;
+        }
+
+        ESP_LOGI(T, "Wave Height: %d-%d ft\n", 
+            minHeight->valueint, 
+            maxHeight->valueint);
+
+        ESP_LOGI(T, "\tRating: %s\n", rating->valuestring);
+    }
+
+    cJSON_Delete(json);
+    return;
+
 }
 
 static void get_surline_data(void *pvParameters)
@@ -66,7 +171,7 @@ static void get_surline_data(void *pvParameters)
         int err = getaddrinfo(WEB_SERVER, WEB_PORT, &hints, &res);
 
         if(err != 0 || res == NULL) {
-            ESP_LOGE(TAG, "DNS lookup failed err=%d res=%p", err, res);
+            ESP_LOGE(T, "DNS lookup failed err=%d res=%p", err, res);
             vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
@@ -74,57 +179,54 @@ static void get_surline_data(void *pvParameters)
         /* Code to print the resolved IP.
             Note: inet_ntoa is non-reentrant, look at ipaddr_ntoa_r for "real" code */
         addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
-        ESP_LOGI(TAG, "DNS lookup succeeded. IP=%s", inet_ntoa(*addr));
+        ESP_LOGI(T, "DNS lookup succeeded. IP=%s", inet_ntoa(*addr));
 
         s = socket(res->ai_family, res->ai_socktype, 0);
         if(s < 0) {
-            ESP_LOGE(TAG, "... Failed to allocate socket.");
+            ESP_LOGE(T, "... Failed to allocate socket.");
             freeaddrinfo(res);
             vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
-        ESP_LOGI(TAG, "... allocated socket");
+        ESP_LOGI(T, "... allocated socket");
 
         if(connect(s, res->ai_addr, res->ai_addrlen) != 0) {
-            ESP_LOGE(TAG, "... socket connect failed errno=%d", errno);
+            ESP_LOGE(T, "... socket connect failed errno=%d", errno);
             close(s);
             freeaddrinfo(res);
             vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
 
-        ESP_LOGI(TAG, "... connected");
+        ESP_LOGI(T, "... connected");
         freeaddrinfo(res);
 
         if (write(s, REQUEST, strlen(REQUEST)) < 0) {
-            ESP_LOGE(TAG, "... socket send failed");
+            ESP_LOGE(T, "... socket send failed");
             close(s);
             vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
-        ESP_LOGI(TAG, "... socket send success");
+        ESP_LOGI(T, "... socket send success");
 
         struct timeval receiving_timeout;
         receiving_timeout.tv_sec = 5;
         receiving_timeout.tv_usec = 0;
         if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &receiving_timeout,
                 sizeof(receiving_timeout)) < 0) {
-            ESP_LOGE(TAG, "... failed to set socket receiving timeout");
+            ESP_LOGE(T, "... failed to set socket receiving timeout");
             close(s);
             vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
-        ESP_LOGI(TAG, "... set socket receiving timeout success");
+        ESP_LOGI(T, "... set socket receiving timeout success");
 
         bzero(recv_buf, sizeof(recv_buf));
         r = read(s, recv_buf, sizeof(recv_buf)-1);
-        for(int i = 0; i < r; i++) {
-            putchar(recv_buf[i]);
-        }
 
         parse_json(recv_buf, r);
 
-        ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
+        ESP_LOGI(T, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
         close(s);
         vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
     }
