@@ -4,8 +4,8 @@ Port Used On My MAC with the dongole plugged in
 
 
 On startup of working on the project or anytime using a new terminal run
-    "startupterm.zsh"
-    This runs the aliased command get_idf to allow idf.py to work in a new terminal
+    get_idf
+    This runs the aliased export.sh command to allow idf.py to work in a new terminal
 
 For all information on creating this project use
     https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#get-started-get-esp-idf
