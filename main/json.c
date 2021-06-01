@@ -3,14 +3,14 @@
  *  V2 api. It requests a single day's worth of data containing the waves and
  *  their optimalScore
  * 
- *  Surfline returns from their API a JSON. Need to figure out how to parse
- *  All returned data still.
+ *  Surfline returns from their API a JSON. The whole 
  * 
- * Modified from the examples given by EspressIf
+ *  Modified from the examples given by EspressIf
  * 
- * Modified By: Hunter Waite
+ *  Modified By: Hunter Waite
  * 
  */
+
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -26,19 +26,33 @@
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
 
-/* Constants that aren't configurable in menuconfig */
-#define WEB_SERVER "services.surfline.com"
-#define WEB_PORT "80"
-#define WEB_PATH "/kbyg/spots/forecasts/wave?&spotId=5842041f4e65fad6a7708832&days=1&intervalHour=12"
+#include "cJSON.h"
+#include "tag.h"
 
-//static const char *TAG = "Surf Clock";
+/* Constants that aren't configurable in menuconfig */
+
+/* Long range not sure if this solution would works as the surline API is not 
+ * documented and can be changed at any time without notice */
+#define WEB_SERVER "services.surfline.com"  // surfline api host
+#define WEB_PORT "80"                       // http port
+/* oceanside spot ID */
+#define WEB_PATH "/kbyg/regions/forecasts/conditions?subregionId=58581a836630e24c44878fd7&days=1"
+
+#define DELAY_TIME  10000   // 10 second delay time between each get request
+
+#define BUFFER_SIZE 2048    // 1000 byte character buffer
 
 static const char *REQUEST = "GET " WEB_PATH " HTTP/1.0\r\n"
     "Host: "WEB_SERVER":"WEB_PORT"\r\n"
     "User-Agent: esp-idf/1.0 esp32\r\n"
     "\r\n";
 
-static void http_get_task(void *pvParameters)
+void parse_json(char *json, int json_len)
+{
+    ESP_LOGI(TAG, "%s\n", json);
+}
+
+static void get_surline_data(void *pvParameters)
 {
     const struct addrinfo hints = {
         .ai_family = AF_INET,
@@ -47,14 +61,13 @@ static void http_get_task(void *pvParameters)
     struct addrinfo *res;
     struct in_addr *addr;
     int s, r;
-    char recv_buf[64];
+    char recv_buf[BUFFER_SIZE];
     while(1) {
         int err = getaddrinfo(WEB_SERVER, WEB_PORT, &hints, &res);
-        ESP_LOGE(TAG, "HERE WE ARE!!!!!!\n\n\n\n\n\"");
 
         if(err != 0 || res == NULL) {
             ESP_LOGE(TAG, "DNS lookup failed err=%d res=%p", err, res);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
 
@@ -67,7 +80,7 @@ static void http_get_task(void *pvParameters)
         if(s < 0) {
             ESP_LOGE(TAG, "... Failed to allocate socket.");
             freeaddrinfo(res);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
         ESP_LOGI(TAG, "... allocated socket");
@@ -76,7 +89,7 @@ static void http_get_task(void *pvParameters)
             ESP_LOGE(TAG, "... socket connect failed errno=%d", errno);
             close(s);
             freeaddrinfo(res);
-            vTaskDelay(4000 / portTICK_PERIOD_MS);
+            vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
 
@@ -86,7 +99,7 @@ static void http_get_task(void *pvParameters)
         if (write(s, REQUEST, strlen(REQUEST)) < 0) {
             ESP_LOGE(TAG, "... socket send failed");
             close(s);
-            vTaskDelay(4000 / portTICK_PERIOD_MS);
+            vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
         ESP_LOGI(TAG, "... socket send success");
@@ -98,28 +111,26 @@ static void http_get_task(void *pvParameters)
                 sizeof(receiving_timeout)) < 0) {
             ESP_LOGE(TAG, "... failed to set socket receiving timeout");
             close(s);
-            vTaskDelay(4000 / portTICK_PERIOD_MS);
+            vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
             continue;
         }
         ESP_LOGI(TAG, "... set socket receiving timeout success");
 
-        /* Read HTTP response */
-        do {
-            bzero(recv_buf, sizeof(recv_buf));
-            r = read(s, recv_buf, sizeof(recv_buf)-1);
-            for(int i = 0; i < r; i++) {
-                putchar(recv_buf[i]);
-            }
-        } while(r > 0);
+        bzero(recv_buf, sizeof(recv_buf));
+        r = read(s, recv_buf, sizeof(recv_buf)-1);
+        for(int i = 0; i < r; i++) {
+            putchar(recv_buf[i]);
+        }
+
+        parse_json(recv_buf, r);
 
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
         close(s);
-        ESP_LOGI(TAG, "Starting again!");
-        vTaskDelay(1);
+        vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
     }
 }
 
 void init_request(void)
 {
-    xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL);
+    xTaskCreate(&get_surline_data, "get_surline_data", 4096, NULL, 5, NULL);
 }
