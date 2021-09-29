@@ -9,5 +9,8 @@ https://services.surfline.com/kbyg/spots/forecasts/wave?&spotId=5842041f4e65fad6
 #### Forecast of Single Day
 https://services.surfline.com/kbyg/regions/forecasts/conditions?subregionId=58581a836630e24c44878fd7&days=1
 
-
+#### Used to check JSON Data
 https://jsonformatter.curiousconcept.com/#
+
+#### Library used to parse incoming JSON
+https://github.com/DaveGamble/cJSON

@@ -16,3 +16,5 @@ To flash build and monitor (after running get_idf)
 get_idf
     An alias put into my terminal's profile to allow me to run esp-idf
     alias get_idf='. $HOME/esp/esp-idf/export.sh'
+
+If you update cmake make sure to run 'idf.py fullclean' then 'idf.py build'
