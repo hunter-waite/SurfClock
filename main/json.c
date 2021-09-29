@@ -39,7 +39,7 @@
 
 #define DELAY_TIME  10000   // 10 second delay time between each get request
 
-#define BUFFER_SIZE 2048    // 2kB byte character buffer
+#define BUFFER_SIZE 2048    // 2500 B byte character buffer
 
 static const char *T = "JSON Parser";
 
@@ -95,16 +95,22 @@ void parse_json(char *recv_buf, int recv_len)
         return;
     }
 
+    // get data portion from JSON
     data = cJSON_GetObjectItemCaseSensitive(json, "data");
 
+    // get conditions portion of JSON
     conditions = cJSON_GetObjectItemCaseSensitive(data, "conditions");
 
+    // different conditions requires this
     cJSON_ArrayForEach(condition, conditions)
     {
+        // get the morning condition report
         am = cJSON_GetObjectItemCaseSensitive(condition, "am");
 
+        // get the morning rating
         rating = cJSON_GetObjectItemCaseSensitive(am, "rating");
 
+        // check and make sure it is a valid rating
         if (!cJSON_IsString(rating))
         {
             ESP_LOGE(T, "\tWrong Rating\n");
@@ -117,8 +123,10 @@ void parse_json(char *recv_buf, int recv_len)
             return;
         }
 
+        // get maximum wave height
         maxHeight = cJSON_GetObjectItemCaseSensitive(am, "maxHeight");
 
+        // make sure maximum height is valid
         if (!cJSON_IsNumber(maxHeight))
         {
             ESP_LOGE(T, "\tWrong Max Height\n");
@@ -131,8 +139,10 @@ void parse_json(char *recv_buf, int recv_len)
             return;
         }
 
+        // get minimum height
         minHeight = cJSON_GetObjectItemCaseSensitive(am, "minHeight");
 
+        // make sure minimum height is valid
         if (!cJSON_IsNumber(minHeight))
         {
             ESP_LOGE(T, "\tWrong Min Height\n");
@@ -145,6 +155,7 @@ void parse_json(char *recv_buf, int recv_len)
             return;
         }
 
+        // log values to console
         ESP_LOGI(T, "Wave Height: %d-%d ft\n", 
             minHeight->valueint, 
             maxHeight->valueint);
@@ -152,6 +163,7 @@ void parse_json(char *recv_buf, int recv_len)
         ESP_LOGI(T, "\tRating: %s\n", rating->valuestring);
     }
 
+    // clear all old JSON values
     cJSON_Delete(json);
     return;
 
@@ -221,13 +233,22 @@ static void get_surline_data(void *pvParameters)
         }
         ESP_LOGI(T, "... set socket receiving timeout success");
 
+        // zero out receive buffer for next fill
         bzero(recv_buf, sizeof(recv_buf));
-        r = read(s, recv_buf, sizeof(recv_buf)-1);
 
+        // wait 2 seconds to make sure the socket has completely recieved the message
+        vTaskDelay(2 / portTICK_PERIOD_MS);
+
+        // read from the socket and get data
+        r = read(s, recv_buf, sizeof(recv_buf));
+
+        // parse the incoming json for data needed
         parse_json(recv_buf, r);
 
         ESP_LOGI(T, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
         close(s);
+
+        // delay until calling again
         vTaskDelay(DELAY_TIME / portTICK_PERIOD_MS);
     }
 }

@@ -18,8 +18,12 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
-#define EXAMPLE_ESP_WIFI_SSID      "Bepis"
-#define EXAMPLE_ESP_WIFI_PASS      "mightyhippo181"
+//#define EXAMPLE_ESP_WIFI_SSID      "Jake Sucks"
+//#define EXAMPLE_ESP_WIFI_PASS      "waterski"
+
+#define EXAMPLE_ESP_WIFI_SSID      "Big Ounce"
+#define EXAMPLE_ESP_WIFI_PASS      "bepis666"
+
 #define EXAMPLE_ESP_MAXIMUM_RETRY  10
 
 static EventGroupHandle_t s_wifi_event_group;
