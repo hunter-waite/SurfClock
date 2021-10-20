@@ -12,6 +12,7 @@
  */
 
 #include <string.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -27,6 +28,7 @@
 #include "lwip/dns.h"
 
 #include "cJSON.h"
+#include "led_strip.c"
 
 /* Constants that aren't configurable in menuconfig */
 
@@ -35,11 +37,20 @@
 #define WEB_SERVER "services.surfline.com"  // surfline api host
 #define WEB_PORT "80"                       // http port
 /* oceanside spot ID */
-#define WEB_PATH "/kbyg/regions/forecasts/conditions?subregionId=58581a836630e24c44878fd7&days=1"
+//#define WEB_PATH "/kbyg/regions/forecasts/conditions?subregionId=58581a836630e24c44878fd7&days=1"
+
+/* slo spot ID */
+#define WEB_PATH "/kbyg/regions/forecasts/conditions?subregionId=58581a836630e24c44879014&days=1"
+
+/* South Carolina spot ID */
+//#define WEB_PATH "/kbyg/regions/forecasts/conditions?subregionId=58581a836630e24c44878fdf&days=1"
+
+/* cayucos spot ID because it is always poor to fair */
+//#define WEB_PATH "/kbyg/regions/forecasts/conditions?subregionId=5842041f4e65fad6a77089a2&days=1"
 
 #define DELAY_TIME  10000   // 10 second delay time between each get request
 
-#define BUFFER_SIZE 2048    // 2500 B byte character buffer
+#define BUFFER_SIZE 2048    // 2048 byte character buffer
 
 static const char *T = "JSON Parser";
 
@@ -48,9 +59,70 @@ static const char *REQUEST = "GET " WEB_PATH " HTTP/1.0\r\n"
     "User-Agent: esp-idf/1.0 esp32\r\n"
     "\r\n";
 
+/* takes in a rating string from the surfline api and returns the correct 
+   Rating struct filled out
+   TODO: Make it a static variable and don't update the LEDs if the rating
+   remains the same
+*/
+Rating calculate_rating(char *r)
+{
+    Rating rating;
+
+    if(!strncmp(r, P, MAX_COMP))
+    {
+        rating.red = 0;
+        rating.green = 17;
+        rating.blue = 255;
+    }
+    else if(!strncmp(r, P_TO_F, MAX_COMP))
+    {
+        rating.red = 0;
+        rating.green = 234;
+        rating.blue = 255;
+    }
+    else if(!strncmp(r, F, MAX_COMP))
+    {
+        rating.red = 0;
+        rating.green = 255;
+        rating.blue = 0;
+    }
+    else if(!strncmp(r, F_TO_G, MAX_COMP))
+    {
+        rating.red = 255;
+        rating.green = 242;
+        rating.blue = 0;
+    }
+    else if(!strncmp(r, G, MAX_COMP))
+    {
+        rating.red = 255;
+        rating.green = 145;
+        rating.blue = 0;
+    }
+    else if(!strncmp(r, G_TO_E, MAX_COMP))
+    {
+        rating.red = 255;
+        rating.green = 0;
+        rating.blue = 0;
+    }
+    else if(!strncmp(r, E, MAX_COMP))
+    {
+        rating.red = 204;
+        rating.green = 0;
+        rating.blue = 255;
+    }
+    else // flat or a not supported value
+    {
+        rating.red = 100;
+        rating.green = 0;
+        rating.blue = 0;
+    }
+
+    return rating;
+}
+
 /* takes in a string and uses CJSON to parse objects, for now prints to 
     terminal */
-void parse_json(char *recv_buf, int recv_len)
+void parse_json(char *recv_buf, int recv_len, led_strip_t *strip)
 {
     // initial json
     const cJSON *data = NULL;
@@ -67,8 +139,33 @@ void parse_json(char *recv_buf, int recv_len)
     
     const char *error_ptr = NULL;
 
+    Rating r;
+
+    // time value
+    struct tm tm;
+    struct tm *adjusted;
+    time_t t;
+
+    // instead of using an NTP server get time date from HTTP header
+    char *content = strstr(recv_buf, "Date: ");
+
+    // move past "Date: "
+    content += 6;
+
+    // parse for time data
+    if (strptime(content, "%a, %d %b %Y %H:%M:%S", &tm) == NULL)
+    {
+        ESP_LOGI(T, "Could not parse time from HTTP header");
+    }
+
+    t = mktime(&tm);
+    t -= 25200;
+    adjusted = localtime(&t);
+
+    ESP_LOGI(T, "hour: %d; minute: %d; second: %d\n", adjusted->tm_hour, adjusted->tm_min, adjusted->tm_sec);
+
     /* get rid of the HTTP header */
-    char *content = strstr(recv_buf, "\r\n\r\n");
+    content = strstr(recv_buf, "\r\n\r\n");
 
     ESP_LOGI(T, "Parsing JSON\n");
 
@@ -85,7 +182,7 @@ void parse_json(char *recv_buf, int recv_len)
     /* check for invalid JSON response */
     if (json == NULL)
     {
-        ESP_LOGE(T, "\tError When First Parse\n");
+        ESP_LOGE(T, "\tError With First Parse\n");
         error_ptr = cJSON_GetErrorPtr();
         if (error_ptr != NULL)
         {
@@ -161,6 +258,11 @@ void parse_json(char *recv_buf, int recv_len)
             maxHeight->valueint);
 
         ESP_LOGI(T, "\tRating: %s\n", rating->valuestring);
+
+        r = calculate_rating(rating->valuestring);
+
+        r.num_leds = maxHeight->valueint;
+        update_led_strip((led_strip_t *)strip, r);
     }
 
     // clear all old JSON values
@@ -169,7 +271,7 @@ void parse_json(char *recv_buf, int recv_len)
 
 }
 
-static void get_surline_data(void *pvParameters)
+static void get_surline_data(void *strip)
 {
     const struct addrinfo hints = {
         .ai_family = AF_INET,
@@ -236,14 +338,15 @@ static void get_surline_data(void *pvParameters)
         // zero out receive buffer for next fill
         bzero(recv_buf, sizeof(recv_buf));
 
-        // wait 2 seconds to make sure the socket has completely recieved the message
-        vTaskDelay(2 / portTICK_PERIOD_MS);
+        // wait 5 seconds to make sure the socket has completely recieved the message
+        // realistically this should be a call to recv or something similar
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
 
         // read from the socket and get data
         r = read(s, recv_buf, sizeof(recv_buf));
 
         // parse the incoming json for data needed
-        parse_json(recv_buf, r);
+        parse_json(recv_buf, r, (led_strip_t *)strip);
 
         ESP_LOGI(T, "... done reading from socket. Last read return=%d errno=%d.", r, errno);
         close(s);
@@ -253,7 +356,8 @@ static void get_surline_data(void *pvParameters)
     }
 }
 
-void init_request(void)
+void init_request(led_strip_t *strip)
 {
-    xTaskCreate(&get_surline_data, "get_surline_data", 4096, NULL, 5, NULL);
+    // create the JSON requests task, pass in the led strip pointer for access
+    xTaskCreate(&get_surline_data, "get_surline_data", 4096, strip, 5, NULL);
 }
