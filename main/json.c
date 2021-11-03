@@ -29,6 +29,7 @@
 
 #include "cJSON.h"
 #include "led_strip.c"
+#include "ssd1306_util.c"
 
 /* Constants that aren't configurable in menuconfig */
 
@@ -68,43 +69,45 @@ Rating calculate_rating(char *r)
 {
     Rating rating;
 
-    if(!strncmp(r, P, MAX_COMP))
+    ESP_LOGI(T, "Rating: %s\n", r);
+
+    if(!strncmp(r, P, MAX_COMP_SHORT))
     {
         rating.red = 0;
         rating.green = 17;
         rating.blue = 255;
     }
-    else if(!strncmp(r, P_TO_F, MAX_COMP))
+    else if(!strncmp(r, P_TO_F, MAX_COMP_LONG))
     {
         rating.red = 0;
         rating.green = 234;
         rating.blue = 255;
     }
-    else if(!strncmp(r, F, MAX_COMP))
+    else if(!strncmp(r, F, MAX_COMP_SHORT))
     {
         rating.red = 0;
         rating.green = 255;
         rating.blue = 0;
     }
-    else if(!strncmp(r, F_TO_G, MAX_COMP))
+    else if(!strncmp(r, F_TO_G, MAX_COMP_LONG))
     {
         rating.red = 255;
         rating.green = 242;
         rating.blue = 0;
     }
-    else if(!strncmp(r, G, MAX_COMP))
+    else if(!strncmp(r, G, MAX_COMP_SHORT))
     {
         rating.red = 255;
         rating.green = 145;
         rating.blue = 0;
     }
-    else if(!strncmp(r, G_TO_E, MAX_COMP))
+    else if(!strncmp(r, G_TO_E, MAX_COMP_LONG))
     {
         rating.red = 255;
         rating.green = 0;
         rating.blue = 0;
     }
-    else if(!strncmp(r, E, MAX_COMP))
+    else if(!strncmp(r, E, MAX_COMP_SHORT))
     {
         rating.red = 204;
         rating.green = 0;
@@ -152,10 +155,14 @@ void parse_json(char *recv_buf, int recv_len, led_strip_t *strip)
     // move past "Date: "
     content += 6;
 
-    // parse for time data
-    if (strptime(content, "%a, %d %b %Y %H:%M:%S", &tm) == NULL)
+    if(content)
     {
-        ESP_LOGI(T, "Could not parse time from HTTP header");
+        ESP_LOGI(T, "%s\n", content);
+        // parse for time data
+        if (strptime(content, "%a, %d %b %Y %H:%M:%S", &tm) == NULL)
+        {
+            ESP_LOGI(T, "Could not parse time from HTTP header");
+        }
     }
 
     t = mktime(&tm);
@@ -163,6 +170,7 @@ void parse_json(char *recv_buf, int recv_len, led_strip_t *strip)
     adjusted = localtime(&t);
 
     ESP_LOGI(T, "hour: %d; minute: %d; second: %d\n", adjusted->tm_hour, adjusted->tm_min, adjusted->tm_sec);
+
 
     /* get rid of the HTTP header */
     content = strstr(recv_buf, "\r\n\r\n");
@@ -259,10 +267,40 @@ void parse_json(char *recv_buf, int recv_len, led_strip_t *strip)
 
         ESP_LOGI(T, "\tRating: %s\n", rating->valuestring);
 
-        r = calculate_rating(rating->valuestring);
+        if(rating)
+        {
+            r = calculate_rating(rating->valuestring);
+        }
 
         r.num_leds = maxHeight->valueint;
         update_led_strip((led_strip_t *)strip, r);
+
+        char data_str[16] = {0};
+        sprintf(data_str, "%02d:%02d", adjusted->tm_hour, adjusted->tm_min);
+        ESP_LOGI(T, "%s\n", data_str);
+        ssd1306_clear_screen(ssd1306_dev, 0x00);
+        ssd1306_draw_3216char(ssd1306_dev, 24, 0, data_str[0]);
+        ssd1306_draw_3216char(ssd1306_dev, 40, 0, data_str[1]);
+        ssd1306_draw_3216char(ssd1306_dev, 56, 0, data_str[2]);
+        ssd1306_draw_3216char(ssd1306_dev, 72, 0, data_str[3]);
+        ssd1306_draw_3216char(ssd1306_dev, 88, 0, data_str[4]);
+
+        char rating_str[16] = {0};
+        for(int i = 0; i < strlen(rating->valuestring); i++)
+        {
+            if(rating->valuestring[i] == '_')
+            {
+                rating->valuestring[i] = ' ';
+            }
+        }
+        sprintf(rating_str, "%s", rating->valuestring);
+        int center_val = 32;
+        if(strlen(rating->valuestring) == 12)
+        {
+            center_val = 16;
+        }
+        ssd1306_draw_string(ssd1306_dev, center_val, 40, (const uint8_t *)rating_str, 16, 1);
+        ssd1306_refresh_gram(ssd1306_dev);
     }
 
     // clear all old JSON values
@@ -359,5 +397,5 @@ static void get_surline_data(void *strip)
 void init_request(led_strip_t *strip)
 {
     // create the JSON requests task, pass in the led strip pointer for access
-    xTaskCreate(&get_surline_data, "get_surline_data", 4096, strip, 5, NULL);
+    xTaskCreate(&get_surline_data, "get_surline_data", 8192, strip, 5, NULL);
 }
