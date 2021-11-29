@@ -273,6 +273,10 @@ void parse_json(char *recv_buf, int recv_len, led_strip_t *strip)
         }
 
         r.num_leds = maxHeight->valueint;
+        if(r.num_leds > CONFIG_EXAMPLE_STRIP_LED_NUMBER)
+        {
+            r.num_leds = CONFIG_EXAMPLE_STRIP_LED_NUMBER;
+        }
         update_led_strip((led_strip_t *)strip, r);
 
         char data_str[16] = {0};

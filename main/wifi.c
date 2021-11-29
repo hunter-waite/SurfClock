@@ -19,12 +19,16 @@
 #include "lwip/sys.h"
 
 // Personal hotspot
-#define EXAMPLE_ESP_WIFI_SSID      "Big Ounce"
-#define EXAMPLE_ESP_WIFI_PASS      "bepis666"
+//#define EXAMPLE_ESP_WIFI_SSID      "Big Ounce"
+//#define EXAMPLE_ESP_WIFI_PASS      "bepis666"
 
 // house
 //#define EXAMPLE_ESP_WIFI_SSID      "Jake Sucks"
 //#define EXAMPLE_ESP_WIFI_PASS      "waterski"
+
+// home
+#define EXAMPLE_ESP_WIFI_SSID      "gromsquad"
+#define EXAMPLE_ESP_WIFI_PASS      "surfpunks"
 
 #define EXAMPLE_ESP_MAXIMUM_RETRY  10
 
